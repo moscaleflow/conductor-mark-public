@@ -94,3 +94,7 @@ All rows use fixed UUIDs (`00000000-d146-4000-*`). Seed script at `tests/seed-v4
 - `tests/screenshots/d146-summary.md` — API result table
 - `tests/screenshots/d146-api-*.json` — per-pill API response data (11 files)
 - `~/Desktop/d146-*.png` — 10 screenshots for Mark's review
+
+---
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-22-d146-v4-pill-verification.md

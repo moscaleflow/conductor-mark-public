@@ -99,3 +99,7 @@ If/when dashboard-v2 is replaced (per D152 shell refinement):
 9. **Tests** — update route assertions
 
 **Estimated touch points:** 9 files, ~15 lines of routing code, plus component/type file moves.
+
+---
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-22-d153-dashboard-v2-reference-audit.md

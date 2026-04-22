@@ -1,124 +1,87 @@
 # V4 Shell Refinement: File-Drop Auto-Routing
 
-> Coder-3 Spec | D152 | For Coder-1 execution
+> Coder-3 Spec | D152 (updated D161) | For Coder-1 execution
 > Source: D85 lock — "File drop on any surface auto-routes by type (contract → Contracts drawer, LinkedIn screenshot → Sales lead flow, scam-chat screenshot → blacklist-or-outreach ambient nudge)"
-> Build order: 6 of 6 (deferred — highest complexity, most design questions)
+> Build order: **ALREADY SHIPPED** — UniversalDropZone already does this globally
 
 ---
 
-## User-observable behavior
+## CRITICAL FINDING: This refinement already exists
 
-**Before:** No drag-and-drop on `/operator`. File uploads exist on dedicated pages:
-- `/` (landing page): PDF/DOCX/TXT upload → contract analysis (`/api/contract/analyze-proxy` or `/api/demo/analyze`)
-- `/reports`: CSV upload → buyer report processing (`/api/buyer-reports/upload`)
-- `/api/leads/import`: CSV upload → lead import
+`src/components/UniversalDropZone.tsx` (985 lines) is a fully built file-drop auto-router that:
 
-**After:** Dropping a file anywhere on the `/operator` page triggers auto-routing:
+1. **Wraps the entire app** via `LayoutShell.tsx` (lines 99-159) — every page including `/operator` already has file drop
+2. **Handles 8 file categories** with smart detection:
 
-| File type | Detection | Route to | Action |
-|---|---|---|---|
-| PDF, DOCX, DOC, TXT | Extension match | Contract analysis | Upload to `/api/contract/analyze-proxy`, then open Milo with: "I just uploaded a contract — analyze it and walk me through the flagged clauses." |
-| CSV | Extension match | Buyer report OR lead import (ambiguous) | Show a disambiguation modal: "Is this a buyer settlement report or a lead import?" → route accordingly |
-| PNG, JPG, JPEG | Extension match | Milo conversation with image | Attach to Milo chat: "I dropped an image — what is this?" (Milo decides based on content: LinkedIn screenshot → sales, scam chat → blacklist, etc.) |
-| Other | Fallback | Milo conversation | Attach to Milo chat: "I dropped a file — what should I do with this?" |
-
-**Drop zone visual:**
-1. When a file is dragged over the page, a full-page overlay appears: translucent backdrop + centered "Drop to upload" text with a file icon
-2. Drop zone border pulses blue (#0a84ff)
-3. On drop: overlay disappears, routing logic fires, toast notification confirms: "Uploading contract..." or "Opening in Milo..."
-4. On drag-leave: overlay disappears
-
-**Acceptance criteria:**
-- Drag-and-drop works on desktop browsers (Chrome, Safari, Firefox, Edge)
-- Full-page drop zone (not a specific target area)
-- File type detection by extension, not MIME (MIME is unreliable on drag)
-- PDF/DOCX: auto-route to contract analysis (no disambiguation)
-- CSV: disambiguation modal (buyer report vs lead import)
-- Images: send to Milo conversation with image attachment
-- Multiple files: process each sequentially, or reject with "Drop one file at a time"
-- Mobile: no drag-and-drop (mobile Safari doesn't support it). No change to mobile UX.
-- Error handling: upload failure shows toast error, does not crash the page
-
----
-
-## File-level scope
-
-| File | Change | ~LOC |
+| Category | Detection | Route |
 |---|---|---|
-| `src/components/operator/FileDropZone.tsx` | **New file.** Full-page drop zone wrapper. Handles `onDragEnter/Over/Leave/Drop`. Renders overlay when dragging. Routes file by extension. | ~100 |
-| `src/components/operator/FileDisambiguationModal.tsx` | **New file.** Small modal for CSV disambiguation: "Buyer report" vs "Lead import" buttons. | ~50 |
-| `src/app/operator/page.tsx` | Wrap page content in `<FileDropZone>`. Pass routing callbacks for each file type. | ~20 |
+| `IMAGE` | Extension: .png, .jpg, .jpeg, .gif, .webp | `/api/capture` — OCR via `callClaudeVision`, entity extraction, scam screening, pipeline add |
+| `LEAD_CSV` | CSV headers: "name" + "email"/"company" | `/api/leads/import` — match existing, create new, flag dupes |
+| `BANK_CSV` | CSV headers: "date" + "description" + "amount"/"balance" | `/api/bank-transactions/import` — auto-match to invoices |
+| `BUYER_REPORT` | Extension: .xlsx, .xls, .xlsm OR CSV with call/CID/disposition headers | `/api/buyer-reports/upload` — reconciliation engine |
+| `CONTRACT` | PDF/DOCX with contract keywords (msa, agreement, io, w9, nda, redline, rider, addendum) | `/api/contract/process` → base64 upload → analysis → opens Milo chat with document ID |
+| `PUBLISHER_INVOICE` | PDF with invoice/statement/bill keywords | `/api/buyer-reports/upload` — cross-check against call records |
+| `TRANSFER_SCRIPT` | .txt/.doc/.docx with script/transfer/creative/ivr/pitch keywords | `/api/creative/analyze` — compliance scoring + qualifier matching |
+| `ASK` | Fallback for unrecognized files | Opens Milo chat: "I dropped a file: {name}. What should I do?" |
 
-**Total: ~170 LOC across 3 files (2 new, 1 modified).**
+3. **CSV disambiguation is automatic** — inspects first 4KB of CSV headers to distinguish lead CSVs, bank CSVs, and buyer reports. No manual disambiguation modal needed.
 
----
+4. **Image handling is fully built** — images go to `/api/capture` which calls `callClaudeVision` for OCR, then extracts companies, runs scam screening, adds to pipeline, and dispatches `milo:entity-open` events. This is exactly D85's "LinkedIn screenshot → Sales lead flow, scam-chat screenshot → blacklist-or-outreach ambient nudge."
 
-## Data dependencies
+5. **Full-page overlay exists** — drag enter shows a backdrop-blurred overlay with file-type-specific messaging and icons. Processing state shows spinner. Success/error shows toast with "View" link.
 
-**No new schema. No new API routes.** All upload targets already exist:
-- `POST /api/contract/analyze-proxy` — accepts FormData with `file` field (PDF/DOCX/TXT)
-- `POST /api/buyer-reports/upload` — accepts FormData with `file` field (CSV)
-- `POST /api/leads/import` — accepts FormData with `file` field (CSV)
-- Image attachment to Milo: via `milo:open-chat-with-message` custom event (would need extension to support file attachments — **see open questions**)
-
----
-
-## Visual requirements
-
-**No HTML design reference exists.** D144 never landed.
-
-**Assumed drop zone overlay (flagged for Mark):**
-```
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│              ┌──────────────────┐                │
-│              │   ↓  Drop file   │                │
-│              │  to auto-route   │                │
-│              └──────────────────┘                │
-│                                                  │
-└──────────────────────────────────────────────────┘
-```
-- Full viewport overlay: `position: fixed; inset: 0`
-- Background: `rgba(0, 0, 0, 0.7)`
-- Center box: `#1c1c1e` background, `2px dashed #0a84ff` border, 16px border-radius
-- Text: `#f5f5f7`, 18px, centered
-- z-index: above footer (z-20), below PillDrawer (z-50)
-
-**Disambiguation modal:**
-- Same dark modal style as other modals in the app
-- Two large tap targets: "Buyer settlement report" and "Lead import"
-- Cancel option to dismiss
+6. **Clipboard paste supported** — pasting images triggers the same flow. Pasting text that looks like a transfer script triggers script analysis.
 
 ---
 
-## Blast radius
+## What D85 requested vs what exists
 
-**Medium-high.** Adds a full-page event listener for drag events. Touches the operator page layout wrapper.
-
-**Risk 1:** Full-page `dragenter`/`dragleave` events are notoriously flaky — child elements trigger leave/enter bubbling, causing the overlay to flicker. **Mitigation:** Use a ref counter pattern: increment on `dragenter`, decrement on `dragleave`, show overlay when counter > 0.
-
-**Risk 2:** Image-to-Milo flow requires extending the `milo:open-chat-with-message` custom event to support file attachments. The current event only carries a `message: string`. **Mitigation:** Either extend the event to `{ message: string; files?: File[] }` (changes LayoutShell/ConversationModal) or upload the image first and include a URL reference in the message. Both require changes beyond the operator page.
-
-**Risk 3:** Auto-routing a PDF to contract analysis assumes every PDF is a contract. If someone drops a random PDF, it gets analyzed as a contract. **Mitigation:** The analysis pipeline handles non-contract PDFs gracefully (returns "no relevant clauses found"). Not a crash, just a useless result. In v4.1, Milo could inspect the first page and ask "Is this a contract?"
-
----
-
-## Build order rationale
-
-Ranked 6 of 6 (last) because:
-- Highest implementation complexity of all 6 refinements
-- Image-to-Milo flow requires extending the chat event system (cross-component change)
-- CSV disambiguation is a UX question that needs Mark's input
-- Desktop-only feature (no mobile drag-and-drop)
-- The upload workflows already exist on dedicated pages — auto-routing is a convenience, not a capability gap
-- Drag-and-drop event handling is brittle and needs careful cross-browser testing
+| D85 requirement | Status |
+|---|---|
+| Drop PDF anywhere on /operator → contract analyzer | **DONE** — `CONTRACT` category, keyword detection, `/api/contract/process` |
+| Drop CSV → appropriate importer | **DONE** — 3-way auto-disambiguation via header inspection |
+| LinkedIn screenshot → Sales lead flow | **DONE** — `IMAGE` category → `/api/capture` → entity extraction → pipeline add |
+| Scam-chat screenshot → blacklist-or-outreach | **DONE** — `/api/capture` runs `screenEntity` for blacklist check + scam screening |
+| File drop on any surface | **DONE** — `LayoutShell` wraps all pages with `UniversalDropZone` |
 
 ---
 
-## Open questions
+## Q1 Resolution: Does Milo streaming accept image attachments?
 
-**Q1 (blocking):** The `milo:open-chat-with-message` custom event currently only carries a string message. Image drop requires passing a `File` object to the conversation. Does Milo's streaming API (`/api/milo/stream`) support image attachments in the request? If not, this feature requires Milo API changes beyond the operator shell.
+**Answer: No, but it doesn't need to.**
 
-**Q2 (assumed answer flagged):** Should "Drop one file at a time" be enforced, or should multi-file drops be supported? **Assumed: single file only for v4.0.** Multi-file adds batch processing complexity.
+`/api/milo/stream` accepts `{ messages: UIMessage[] }` as JSON (line 100-101). UIMessage parts are filtered to `type: 'text'` only (line 120-122). No image parts, no FormData, no base64 image support in the streaming endpoint.
 
-**Q3 (assumed answer flagged):** D85 mentions "LinkedIn screenshot → Sales lead flow, scam-chat screenshot → blacklist-or-outreach ambient nudge." These require Milo to visually classify the image content. Is this expected to use Claude's vision API? **Assumed: yes** — the image goes to Milo chat, Milo uses vision to interpret and route. The operator page doesn't need to classify images; Milo does.
+**This is not a gap** because images are handled by a separate pipeline:
+- `UniversalDropZone.processImage()` → `/api/capture` (line 564) → `callClaudeVision` (OCR) → entity extraction → scam screening → pipeline add → `milo:entity-open` event
+- The image never needs to reach Milo's streaming endpoint. Claude Vision does the image understanding; Milo chat gets a text message about the extracted entity.
+
+**If image-in-Milo-chat were ever needed** (e.g., "Milo, what is this screenshot?"), the changes would be:
+1. Extend `UIMessage` parts to include `{ type: 'image'; image: string }` (~5 LOC in stream route)
+2. Pass image parts to `streamMiloResponse` which forwards them to Claude as image content blocks (~10 LOC in milo-agent)
+3. Extend `sendMessage` in `ConversationModal` to accept `File` alongside text (~15 LOC)
+**Total: ~30 LOC across 3 files.** But this is not needed for D85 scope — the capture pipeline is the correct architecture for screenshots.
+
+---
+
+## Remaining work (if any)
+
+**The only possible gap:** D85 mentions "file drop auto-routing" as a V4 shell refinement. Since `UniversalDropZone` already does this globally, spec 05 should be **marked as ALREADY SHIPPED** and removed from Coder-1's backlog.
+
+**Potential v4.1 enhancements (not in scope):**
+- Add `disputes` category for dispute evidence documents
+- Add `timesheet` category for VA time tracker imports
+- Improve PDF disambiguation (currently PDF falls to `ASK` if no keyword match — could use first-page Vision inspection)
+- Add multi-file drop support (currently takes `files[0]` only, line 375)
+
+---
+
+## Build order update
+
+**Removed from build order.** Refinement 05 is complete. The updated build order for remaining refinements is:
+
+1. 06: Decommission /dashboard-v2
+2. 02: Footer sync status
+3. 04: Curated picker
+4. 03: Long-press jiggle
+5. 01: Mic placement

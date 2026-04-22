@@ -100,3 +100,7 @@ This is the third instance of code querying statuses that DB constraints don't a
 - `tests/seed-v4-pills.ts` — extended with contract_documents, prospect_pipeline, reconciliation_runs, buyer_reports seed data
 - `tests/v4-pills-d146b.spec.ts` — Playwright visual spec for 3 new pills (contracts, sales_pipeline, accounting with 4 tabs)
 - `~/Desktop/d146b-*.png` — 9 screenshots for Mark's review
+
+---
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-22-d146b-v4-pill-visual-verification.md
