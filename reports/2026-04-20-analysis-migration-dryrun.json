@@ -1,0 +1,100 @@
+{
+  "mode": "dry-run",
+  "migration": "@milo/contract-analysis",
+  "source": "wjxtfjaixkoifdqtfmqd (MOP frozen)",
+  "target": "tappyckcteqgryjniwjg (shared)",
+  "tenant_id": "tlp",
+  "run_timestamp": "2026-04-20T15:24:00Z",
+  "preflight": {
+    "source_analysis_count": 33,
+    "source_jobs_count": 28,
+    "source_jobs_eligible": 27,
+    "source_jobs_skipped": 1,
+    "source_storage_files": 73,
+    "target_existing_conflicts": 0,
+    "warnings": [
+      "Expected 22 storage files, found 73. Migration will proceed with actual count."
+    ],
+    "notes": [
+      "Audit estimated 22 files based on freeze manifest. Actual bucket has 73 (includes multiple versions/uploads per analysis). All 73 will migrate.",
+      "Split-brain risk flagged by Coder-3 (commit 1b98346): MOP may still be writing to contract_analyses post-unfreeze. Selective contract-writes freeze required before live execution.",
+      "0 orphaned parent_analysis_id refs (version chains intact)",
+      "0 jobs reference non-existent analyses",
+      "0 profile_used='TEST' rows (all production data)"
+    ]
+  },
+  "tables": {
+    "analysis_records": {
+      "rows_to_migrate": 33,
+      "rows_tagged_test": 0,
+      "columns_direct": 25,
+      "columns_to_metadata": 5,
+      "metadata_fields": [
+        "source_publisher_id",
+        "source_buyer_id",
+        "source_negotiation_stage",
+        "source_is_finalized",
+        "extracted_company_name",
+        "migrated_from",
+        "migrated_at"
+      ],
+      "skipped": []
+    },
+    "analysis_jobs": {
+      "rows_to_migrate": 27,
+      "rows_skipped_stale": 1,
+      "columns_direct": 10,
+      "columns_to_analysis_config": 3,
+      "analysis_config_fields": [
+        "playbook_preset",
+        "threshold_profile",
+        "analysis_profile",
+        "migrated_from"
+      ],
+      "skipped": [
+        {
+          "id": "1a46c8c3-037b-45c9-9b61-b97ed79b07f4",
+          "reason": "Stale job (status: processing) — will never complete",
+          "status": "processing"
+        }
+      ]
+    }
+  },
+  "storage": {
+    "bucket": "contract-originals",
+    "total_files": 73,
+    "path_transform": "YYYY-MM/uuid-filename → tlp/YYYY-MM/uuid-filename",
+    "folders": ["2026-02", "2026-03", "2026-04", "__test__"],
+    "files_by_folder": {
+      "2026-02": 49,
+      "2026-03": 16,
+      "2026-04": 7,
+      "__test__": 1
+    },
+    "missing_files": [],
+    "sample_mappings": [
+      {
+        "source": "2026-02/00cc1c8f-2b0b-4275-a2e6-023c7bcff4a8-Complete_with_Docusign_LAG_MSA_The_Lead_Peng.pdf",
+        "target": "tlp/2026-02/00cc1c8f-2b0b-4275-a2e6-023c7bcff4a8-Complete_with_Docusign_LAG_MSA_The_Lead_Peng.pdf"
+      },
+      {
+        "source": "2026-03/4c6dca73-7a2b-4fe5-a32d-3c5fb34c1ea6-Astoria_Company_-_Pay_Per_Call_IO__TLP_as_Seller_-redline.docx",
+        "target": "tlp/2026-03/4c6dca73-7a2b-4fe5-a32d-3c5fb34c1ea6-Astoria_Company_-_Pay_Per_Call_IO__TLP_as_Seller_-redline.docx"
+      },
+      {
+        "source": "2026-04/fcd60471-b692-4f26-99a2-e49c20d7471c-CrossBlade_Buyer_MSA.pdf",
+        "target": "tlp/2026-04/fcd60471-b692-4f26-99a2-e49c20d7471c-CrossBlade_Buyer_MSA.pdf"
+      }
+    ]
+  },
+  "excluded_tables": {
+    "contract_issue_decisions": "0 rows, dead table — skipped",
+    "contract_issue_resolutions": "vertical-coupled, deferred to v0.2.0"
+  },
+  "blocking_requirements": [
+    "Selective contract-writes freeze on MOP before live execution (Coder-3 split-brain risk)",
+    "Mark review of this dry-run output"
+  ],
+  "idempotent": true,
+  "reversible": true
+}
