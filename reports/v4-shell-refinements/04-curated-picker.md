@@ -27,13 +27,13 @@
 
 **Acceptance criteria:**
 - Picker renders as a bottom sheet on mobile, center modal on desktop (responsive)
-- Full catalog of 30 unique pills across all roles is browsable (deduplicated by id)
+- Full catalog of 40 unique pills across all roles is browsable (deduplicated by id — updated from 30 after D151 added esign, drafts, publishers, buyers)
 - Already-active pills are visually distinct (checked/grayed)
 - Adding a pill persists via existing `createCustomPill` tool (reuse the storage path)
 - OR: adding a role pill restores it from `hidden_pills` if it was hidden, or adds to `pill_order` if it's from another role
 - "Create custom pill" option at bottom opens Milo conversation (existing flow)
 - Picker is dismissible via close button, tap-outside, or Escape key
-- No search/filter needed for v4.0 (30 pills fit in a scrollable list)
+- No search/filter needed for v4.0 (40 pills fit in a scrollable list, but consider adding a text filter if it feels cluttered in testing)
 
 ---
 
@@ -44,10 +44,12 @@
 | `src/components/operator/PillPicker.tsx` | **New file.** Renders the picker overlay. Receives all pills (full catalog), active pill ids, and callbacks for add/create-custom. Groups pills by role. Responsive: bottom sheet (mobile) vs modal (desktop). | ~140 |
 | `src/components/operator/PillBar.tsx` | Change `onAddClick` to open PillPicker instead of dispatching to Milo. Pass full catalog and active ids. | ~10 |
 | `src/app/operator/page.tsx` | Add state for picker open/close. Pass `allPills` (full catalog from all roles) and `onAddPill` callback. | ~15 |
-| `src/lib/operator-pills.ts` | Export `ALL_PILLS`: deduplicated flat list of all pills across all roles, with a `role` field added for grouping. Export pill descriptions (new `PILL_DESCRIPTIONS` map). | ~40 |
+| `src/lib/operator-pills.ts` | Export `ALL_PILLS`: deduplicated flat list of all 40 pills across 8 roles, with a `role` field added for grouping. Export pill descriptions (new `PILL_DESCRIPTIONS` map — 40 entries). | ~60 |
 | `src/app/api/operator/route.ts` | Return `all_pills` in the response (full catalog for the picker). | ~5 |
 
-**Total: ~210 LOC across 5 files.**
+**Total: ~230 LOC across 5 files.**
+
+**Note (post-D151):** DRAWER_PILL_IDS now has 19 entries (added esign, drafts, publishers, buyers). The picker should distinguish drawer-capable pills (19) from chat-only pills (21) — perhaps with a small icon indicating "opens drawer" vs "opens conversation."
 
 ---
 

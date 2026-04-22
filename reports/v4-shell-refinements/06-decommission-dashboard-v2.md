@@ -1,7 +1,8 @@
 # V4 Shell Refinement: Decommission /dashboard-v2
 
-> Coder-3 Spec | D152 | For Coder-1 execution
+> Coder-3 Spec | D152 (updated D156) | For Coder-1 execution
 > Source: D85 amendment — "/dashboard-v2 decommission + 'Full dashboard →' link removal"
+> Cross-reference: D153 reference audit (af97218) — Coder-1 found 50 references, 7 hard dependencies
 > Build order: 1 of 6 (ship first — clears tech debt before building new features)
 
 ---
@@ -64,11 +65,28 @@ Admins land on `/dashboard-v2` via middleware redirect (line 153). The operator 
 
 ### Cross-component imports from dashboard-v2 (keep, do not delete)
 
+Per D153 audit (af97218) — these import reusable components/types that live inside the dashboard-v2 folder. They depend on the folder existing, not the route being accessible.
+
 | File | Import | Why keep |
 |---|---|---|
 | `src/app/pipeline-board/page.tsx` | `EntityDetailPanel` from `dashboard-v2/` | Used by pipeline-board, not by dashboard-v2 page |
 | `src/app/pipeline/page.tsx` | `KanbanBlock`, `EntityDetailPanel` from `dashboard-v2/` | Used by pipeline page |
+| `src/components/ConversationModal.tsx` | `EntityDetailPanel`, `ContractAnalysisDisplay` from `dashboard-v2/` | Used by conversation modal for inline entity/contract views |
+| `src/components/OnboardingTour.tsx` | `BlockId` type from `dashboard-v2-types` | Tour step targeting |
+| `src/app/api/walkthrough/route.ts` | `ROLE_BLOCKS`, `USER_BLOCKS`, `BLOCK_TITLES`, `BlockId`, `RoleName` from `dashboard-v2-types` | Walkthrough API logic |
 | `src/lib/operator-pills.ts` | `RoleName` from `dashboard-v2-types` | Type definition still needed |
+
+**Relocation plan (v4.1):** Move `EntityDetailPanel`, `KanbanBlock`, `ContractAnalysisDisplay` to `src/components/shared/`. Move `dashboard-v2-types.ts` to `src/lib/types.ts` or split into domain-specific type files. Not in v4.0 scope — the folder stays, only the page route is deleted.
+
+### Test file references (update)
+
+D153 found test assertions that hardcode `/dashboard-v2`:
+
+| File | Lines | Action |
+|---|---|---|
+| `tests/role-qa.spec.ts` | 316, 345 | Update admin route assertion to `/operator` |
+| `scripts/e2e/auth-flow-2026-04-21.ts` | 92, 99, 102, 164 | Update auth flow assertions to `/operator` |
+| `tests/screenshots/d146-api-*.json` | various | Update hardcoded test result URLs |
 
 ### Files to delete
 
@@ -115,6 +133,7 @@ redirects: async () => [
 - "Back" links from contract-review, setup, reconciliation, pipeline-board, pipeline, invoices, disputes all navigate to `/operator`
 - "Stop impersonating" in ImpersonationBanner and Topbar navigate to `/operator`
 - `npm run build` passes clean
+- Test assertions in `role-qa.spec.ts` and `auth-flow-2026-04-21.ts` pass with `/operator` routes
 - No 404s on any page that previously linked to `/dashboard-v2`
 
 ---
@@ -133,9 +152,12 @@ redirects: async () => [
 | `src/components/admin/AdminSkillBar.tsx` | Edit: remove dashboard-v2 pathname check | -2 |
 | `src/app/dashboard-v2/page.tsx` | **Delete** | -2,237 |
 | `next.config.js` or `next.config.mjs` | Add redirect rule | 3 |
+| `tests/role-qa.spec.ts` | Edit: update admin route assertions | 2 |
+| `scripts/e2e/auth-flow-2026-04-21.ts` | Edit: update 4 auth flow assertions | 4 |
 | ~14 files | Comment updates only | ~14 |
 
-**Net: -2,220 LOC. 12 files edited, 1 file deleted, ~14 comment-only updates.**
+**Net: -2,214 LOC. 14 files edited, 1 file deleted, ~14 comment-only updates.**
+**D153 cross-check: all 7 hard dependencies and 3 soft dependencies from af97218 are covered above.**
 
 ---
 
