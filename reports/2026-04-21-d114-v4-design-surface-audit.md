@@ -463,3 +463,5 @@ This has more infrastructure than E-sign (which needs a full build) and Drafts (
 ### Merge decision needed from Mark
 
 - **Billing**: merge into Accounting (as sub-tab) or redefine scope boundary
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-21-d114-v4-design-surface-audit.md

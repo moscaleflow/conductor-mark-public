@@ -571,3 +571,5 @@ The `DrawerItem` interface (id, severity, title, description, entity_name, reven
 ## Surprise Flag
 
 **The V4 architecture is 70% built.** D114 (and Mark's D85 directive) framed V4 as a "radical departure." It's not — `/operator` already ships the conversation-first, pill-fan, drawer-based pattern. The "Full dashboard →" link at the bottom is the only remaining thread to the old model. V4 is an expansion of existing infrastructure (more pill types, more drawer data sources, new input modalities), not a greenfield build.
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-21-d118-v4-design-surface-audit.md

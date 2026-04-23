@@ -522,3 +522,5 @@ PillDrawer currently shows "Snooze 24h" on every row ([PillDrawer.tsx:323-327](s
 3. **Accounting pill** — 4 parallel queries, tabbed response. Most complex. Ship last.
 
 Estimated: 3 commits, sequential dependency (1 → 2 → 3).
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-22-d140-sales-accounting-impl-specs.md

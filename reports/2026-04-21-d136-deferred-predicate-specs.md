@@ -255,3 +255,5 @@ The `items: []` top-level field keeps backward compatibility with `PillDrawer`'s
 **Q2.** `buyer_reports` tab — is "unfinished reports" (uploaded but not yet processed) the right filter? Or should it show recent completed reports with discrepancies? The current `/reports` page is a CSV upload + mapping tool — unclear if that workflow belongs in a drawer.
 
 **Q3.** Does the Reconciliation tab need to show anything beyond what already surfaces as alerts? If not, it's purely a filtered view of the existing alert-based drawer — no new data source needed.
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-21-d136-deferred-predicate-specs.md

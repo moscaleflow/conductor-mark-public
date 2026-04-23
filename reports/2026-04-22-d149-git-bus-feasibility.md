@@ -362,3 +362,5 @@ https://milo-for-ppc.vercel.app
 https://milo-outreach-scale-flow.vercel.app
 https://tlpmop.netlify.app
 ```
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-22-d149-git-bus-feasibility.md

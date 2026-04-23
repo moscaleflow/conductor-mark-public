@@ -330,3 +330,5 @@ No read paths change in this phase. Outreach continues reading from its own `lea
 | **Total** | **4 directives** | Coder-2 |
 
 Prerequisite: Commits 1-2 are gated on Mark answering Q1 (Option B confirmation) and Q2 (delete behavior).
+
+Report at: https://raw.githubusercontent.com/moscaleflow/conductor-mark-public/main/reports/2026-04-21-d106-milo-outreach-crm-scoping.md
