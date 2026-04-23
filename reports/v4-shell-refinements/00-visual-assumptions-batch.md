@@ -1,288 +1,215 @@
-# V4 Shell Refinements: Visual Assumptions for Mark Review
+# V4 Shell Refinements: Visual Assumptions — Approve or Redline
 
-> Coder-3 | D161 | 2026-04-22
-> No HTML design reference exists (D144 screen inventory never landed).
-> Every visual assumption below is flagged — Mark scans, approves or corrects.
-> Format: one section per refinement, every token value explicit.
+> Coder-3 | D161 → D164a | 2026-04-22
+> No HTML design reference exists (D144 never landed).
+> This is the minimum-viable design spec. Coder-1 builds to whatever Mark approves.
 >
-> **Instructions for Mark:** Read each item. If it's fine, skip it. If something
-> should change, write the correction next to it. If everything is fine, say
-> "approve all" and Coder-1 builds to these specs.
+> **How to review:** Scan each numbered item. If it's fine, leave the checkbox empty.
+> If something needs to change, check the box and write the correction.
+> If everything is fine: "approve all." Expected review time: 5 minutes.
 
 ---
 
-## Spec 01: Mic Icon in SearchBar
+## 1. Mic Icon (Spec 01 — SearchBar)
 
-### Icon
-
-| Property | Assumed value | Notes |
-|---|---|---|
-| Style | SF Symbols-style outline mic | Inline SVG, no external icon library |
-| Stroke weight | 1.5px | Matches UniversalDropZone icon stroke weight |
-| Size | 18px | Proportional to input's 15px font-size |
-| Color (idle) | `#636366` | Muted gray, matches placeholder text |
-| Color (listening) | `#ff453a` | Red, matches severity-critical dot |
-| Color (unavailable) | `#48484a` | Darker gray, clearly disabled |
-
-### Position
-
-| Property | Assumed value |
-|---|---|
-| Placement | Right side of input, inside the border radius |
-| Input padding-right | 44px (leaves room for icon + breathing space) |
-| Icon right offset | 14px from input right edge |
-| Vertical alignment | Centered in input (same as text baseline) |
-
-### Animation (listening state)
-
-| Property | Assumed value |
-|---|---|
-| Type | Opacity pulse |
-| Keyframes | `0%: opacity 1` → `50%: opacity 0.4` → `100%: opacity 1` |
-| Duration | 1s, infinite |
-| Timing | `ease-in-out` |
-
-### Behavior
-
-| Property | Assumed value |
-|---|---|
-| Tap/click | Start listening |
-| Tap again while listening | Stop listening, submit transcription |
-| Speech end (silence) | Auto-submit after 1.5s silence |
-| Permission denied | Icon grays out, tooltip: "Microphone not available" |
-| Unsupported browser | Icon hidden entirely |
-
----
-
-## Spec 02: Footer Sync Status Bar
-
-### Layout
-
+**What it looks like:**
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ ● Live · synced                           Checked 3m ago │
+│ Ask Milo anything…  e.g. "Show me flagged calls"    🎤  │
 └──────────────────────────────────────────────────────────┘
+                                                       ↑
+                                              18px outline mic
+                                              #636366 idle
+                                              #ff453a when listening
 ```
 
-| Property | Assumed value |
-|---|---|
-| Position | `fixed`, bottom of viewport |
-| Width | Full viewport width |
-| Height | 36px |
-| Padding | `0 24px` (matches page content padding) |
-| Background | `#000000` (matches page) |
-| Border-top | `0.5px solid #1c1c1e` |
-| z-index | 10 (below PillDrawer at 50, below UniversalDropZone at 9999) |
+- [ ] **1a. Icon style:** SF Symbols-style outline mic, 1.5px stroke, 18px, inline SVG. No icon library.
+  - Change to: ___
 
-### Text styling
+- [ ] **1b. Colors:** Idle `#636366` (gray) → Listening `#ff453a` (red) → Unavailable `#48484a` (dark gray, hidden if browser lacks Web Speech API)
+  - Change to: ___
 
-| Element | Font size | Color (healthy) | Color (degraded) | Color (critical) |
-|---|---|---|---|---|
-| Status dot | 8px circle | `#30d158` (green) | `#ff9f0a` (amber) | `#ff453a` (red) |
-| Status label | 12px | `#636366` | `#ff9f0a` | `#ff453a` |
-| Timestamp / "Troubleshoot" | 12px | `#48484a` | `#0a84ff` (link blue) | `#f5f5f7` (white, underlined) |
+- [ ] **1c. Position:** Right-aligned inside input, 14px from right edge. Input gets 44px right padding.
+  - Change to: ___
 
-### Content by state
+- [ ] **1d. Listening animation:** Opacity pulse (1 → 0.4 → 1) over 1s, infinite, ease-in-out.
+  - Change to: ___
 
-| State | Left text | Right text |
-|---|---|---|
-| Healthy | `● Live · synced` | `Checked 3m ago` |
-| Degraded | `● Degraded · {service} slow` | `Troubleshoot` (clickable) |
-| Critical | `● Offline · {service} down` | `Troubleshoot` (clickable, white) |
-| Loading | `● Checking...` | (empty) |
-
-### Mobile
-
-| Property | Assumed value |
-|---|---|
-| Text truncation | Status label truncates, "Troubleshoot" stays visible |
-| Height | Same 36px |
-| Padding | `0 16px` |
+- [ ] **1e. Behavior:** Tap starts listening. Speech end (1.5s silence) auto-submits to Milo. Tap again cancels.
+  - Change to: ___
 
 ---
 
-## Spec 03: Long-Press Jiggle Mode
+## 2. Footer Sync Status (Spec 02 — new component)
 
-### Entry trigger
+**What it looks like (3 states):**
+```
+Healthy:
+┌────────────────────────────────────────────────────────────┐
+│ ● Live · synced                             Checked 3m ago │
+└────────────────────────────────────────────────────────────┘
+  green dot, #636366 text                     #48484a text
 
-| Property | Assumed value |
-|---|---|
-| Touch | 500ms hold without movement |
-| Mouse | 500ms mousedown without mousemove (>5px threshold) |
-| Haptic (mobile) | `navigator.vibrate(10)` on trigger |
+Degraded:
+┌────────────────────────────────────────────────────────────┐
+│ ● Degraded · TrackDrive slow                  Troubleshoot │
+└────────────────────────────────────────────────────────────┘
+  amber dot, #ff9f0a text                     #0a84ff link
 
-### Jiggle animation
-
-```css
-@keyframes jiggle {
-  0%, 100% { transform: rotate(0deg); }
-  25%      { transform: rotate(-2deg); }
-  75%      { transform: rotate(2deg); }
-}
+Critical:
+┌────────────────────────────────────────────────────────────┐
+│ ● Offline · MOP API down                      Troubleshoot │
+└────────────────────────────────────────────────────────────┘
+  red dot, #ff453a text                       #f5f5f7 white underlined
 ```
 
-| Property | Assumed value |
-|---|---|
-| Duration | 0.3s |
-| Iteration | infinite |
-| Timing | ease-in-out |
-| Per-pill delay | Random 0ms–150ms (so pills don't wiggle in sync) |
+- [ ] **2a. Position:** Fixed bottom of viewport, full width, 36px height, `#000` background, `0.5px solid #1c1c1e` top border.
+  - Change to: ___
 
-### Delete button (x)
+- [ ] **2b. Dot colors:** Green `#30d158` / Amber `#ff9f0a` / Red `#ff453a`, 8px circle.
+  - Change to: ___
 
-| Property | Assumed value |
-|---|---|
-| Shape | Circle |
-| Size | 16px diameter |
-| Background | `#ff453a` (red) |
-| Icon | White `×`, 10px font, centered |
-| Position | Top-left corner of pill, offset -6px both axes |
-| Tap target | 24px (larger than visual for touch) |
+- [ ] **2c. Text styling:** 12px throughout. Status label inherits dot color (gray/amber/red). Timestamp `#48484a`. "Troubleshoot" link `#0a84ff` (degraded) or `#f5f5f7` underlined (critical).
+  - Change to: ___
 
-### Pill drag state (v4.1 — deferred)
+- [ ] **2d. "Troubleshoot" action:** Opens Milo with "something looks degraded — run a health check and tell me what's wrong." Only visible when degraded/critical.
+  - Change to: ___
 
-| Property | Assumed value |
-|---|---|
-| Scale on grab | 1.05× |
-| Shadow on grab | `0 4px 16px rgba(0,0,0,0.4)` |
-| Drop target gap | Adjacent pills spread from 8px to 24px gap |
-| Drop animation | 200ms ease-out snap to position |
+- [ ] **2e. Visibility:** Shows for both admin and non-admin users on /operator.
+  - Change to: ___
 
-### Done button
-
-| Property | Assumed value |
-|---|---|
-| Label | "Done" |
-| Position | End of pill bar (after last pill, replacing `+ Add pill`) |
-| Style | Same as `+ Add pill` dashed border, but label "Done" in `#0a84ff` |
-
-### Exit triggers
-
-| Trigger | Action |
-|---|---|
-| Tap "Done" | Exit jiggle, save order |
-| Tap outside pill bar | Exit jiggle, save order |
-| Press Escape | Exit jiggle, save order |
-| Navigate away | Exit jiggle, discard unsaved changes |
+- [ ] **2f. Mobile:** Same 36px height, padding shrinks to `0 16px`. Status text truncates; "Troubleshoot" stays visible.
+  - Change to: ___
 
 ---
 
-## Spec 04: Curated Pill Picker
+## 3. Long-Press Jiggle (Spec 03 — PillBar edit mode)
 
-### Desktop modal
+**What it looks like:**
+```
+Normal:
+  ┌─────────┐ ┌────────────┐ ┌──────────┐ ┌──────────┐
+  │ QA queue │ │ Ping health │ │ Calls    │ │ + Add    │
+  └─────────┘ └────────────┘ └──────────┘ └──────────┘
 
-| Property | Assumed value |
-|---|---|
-| Width | 480px |
-| Max height | 70vh |
-| Border radius | 16px |
-| Background | `#1c1c1e` |
-| Border | `0.5px solid #38383a` |
-| Backdrop | `rgba(0,0,0,0.6)` with `backdrop-filter: blur(8px)` |
-| Position | Centered (fixed, inset 0, flex center) |
-| z-index | 60 (above PillDrawer at 50) |
+Jiggle mode (all pills wobble ±2°):
+  ╭──╮         ╭──╮            ╭──╮          
+  │×│          │×│             │×│          
+  ╰──╯         ╰──╯            ╰──╯          
+  ┌~─────────┐ ┌~────────────┐ ┌~──────────┐ ┌──────────┐
+  │ QA queue ~│ │ Ping health ~│ │ Calls   ~│ │  Done    │
+  └~─────────┘ └~────────────┘ └~──────────┘ └──────────┘
+  ↑                                            ↑
+  16px red circle × button                     replaces "+ Add pill"
+  at top-left, offset -6px                     "Done" in #0a84ff
+```
 
-### Mobile bottom sheet
+- [ ] **3a. Entry trigger:** 500ms long-press (touch hold or mousedown without move). Haptic `vibrate(10)` on mobile.
+  - Change to: ___
 
-| Property | Assumed value |
-|---|---|
-| Width | 100% |
-| Max height | 60vh |
-| Border radius | 16px top corners only |
-| Drag handle | 36px wide, 4px tall, `#48484a`, centered at top with 8px margin |
-| Animation | Slide up from bottom, 200ms ease-out |
-| Dismiss | Drag down past 50% threshold, or tap backdrop |
+- [ ] **3b. Jiggle animation:** ±2 degree rotation, 0.3s cycle, infinite. Random 0–150ms delay per pill so they wobble out of sync.
+  - Change to: ___
 
-### Header
+- [ ] **3c. Delete button:** 16px red circle (`#ff453a`) with white `×` (10px). Top-left of pill, offset -6px. 24px tap target.
+  - Change to: ___
 
-| Property | Assumed value |
-|---|---|
-| Text | "Add a pill" |
-| Font size | 17px, weight 600 |
-| Color | `#f5f5f7` |
-| Close button | `×` in `#636366`, 15px, top-right |
-| Padding | `16px 20px` |
-| Border-bottom | `0.5px solid #38383a` |
+- [ ] **3d. "Done" button:** Replaces `+ Add pill` at end of bar. Dashed border style, label "Done" in `#0a84ff`.
+  - Change to: ___
 
-### Section headers
+- [ ] **3e. Exit:** Tap "Done", tap outside pill bar, or Escape key. All save immediately.
+  - Change to: ___
 
-| Property | Assumed value |
-|---|---|
-| Labels | "YOUR PILLS", "AVAILABLE", "OTHER ROLES" |
-| Font size | 11px |
-| Weight | 600 |
-| Color | `#636366` |
-| Transform | uppercase |
-| Letter spacing | 0.5px |
-| Padding | `12px 20px 4px` |
-
-### Pill rows
-
-| Property | Assumed value |
-|---|---|
-| Height | 44px |
-| Padding | `0 20px` |
-| Layout | Flex row: checkbox/indicator + label + description |
-| Tap target | Full row width |
-
-| Element | Active pill | Available pill |
-|---|---|---|
-| Indicator | Filled circle check in `#30d158` | Empty circle outline in `#48484a` |
-| Label | `#636366` (dimmed) | `#f5f5f7` |
-| Description | Hidden | `#8e8e93`, 12px, truncated to 1 line |
-| Hover | No hover (disabled) | Background → `#2c2c2e` |
-
-### Drawer vs chat indicator
-
-| Property | Assumed value |
-|---|---|
-| Icon | Small grid icon (drawer) or chat bubble icon (chat) |
-| Size | 12px, color `#48484a` |
-| Position | Right side of row, before description |
-| Purpose | 19 drawer-capable pills get grid icon; 21 chat-only pills get bubble icon |
-
-### "Other Roles" section
-
-| Property | Assumed value |
-|---|---|
-| Default state | Collapsed (header only, with `▸` chevron) |
-| Tap header | Toggles open/closed with `▸` / `▾` |
-| Hidden for admin | Yes — admin role already spans all domains |
-
-### "Create custom pill" row
-
-| Property | Assumed value |
-|---|---|
-| Position | Bottom of list, below all sections |
-| Icon | `+` in `#0a84ff` |
-| Label | "Create custom pill" in `#0a84ff` |
-| Behavior | Closes picker, opens Milo conversation (existing flow) |
-| Separator | `0.5px solid #38383a` above this row |
+- [ ] **3f. Drag reorder:** DEFERRED to v4.1. Jiggle mode in v4.0 only supports hide/delete, not reorder.
+  - Change to: ___
 
 ---
 
-## Design system reference (existing tokens used above)
+## 4. Curated Pill Picker (Spec 04 — replaces free-text "Add pill")
 
-These values are pulled from the shipped PillBar, PillDrawer, MorningBriefing, and SearchBar components:
+**What it looks like (desktop modal, 480px):**
+```
+┌─────────────────────────────────────────────┐
+│ Add a pill                               ✕  │
+├─────────────────────────────────────────────┤
+│ YOUR PILLS                                  │
+│ ● QA queue                       (active)   │
+│ ● Ping health                    (active)   │
+├─────────────────────────────────────────────┤
+│ AVAILABLE                                    │
+│ ○ MediaRite xref ▦ Missing CIDs + mismatch │
+│ ○ Needs attention ▦ Alerts needing action   │
+│ ○ Calls ▦ Call-quality alerts               │
+│ ○ Pipeline ▧ Prospect pipeline overview     │
+├─────────────────────────────────────────────┤
+│ OTHER ROLES                             ▸   │
+├─────────────────────────────────────────────┤
+│ + Create custom pill                        │
+└─────────────────────────────────────────────┘
 
-| Token | Hex | Usage |
+Legend: ● = active (green fill)  ○ = available (gray outline)
+        ▦ = opens drawer         ▧ = opens chat
+```
+
+**Mobile (bottom sheet, full width, 60vh max):**
+```
+        ─────    ← drag handle, 36×4px, #48484a
+┌─────────────────────────────────────────────┐
+│ Add a pill                               ✕  │
+│ (same content as desktop, scrollable)        │
+└─────────────────────────────────────────────┘
+```
+
+- [ ] **4a. Desktop container:** 480px wide, 70vh max, centered modal. Background `#1c1c1e`, border `0.5px solid #38383a`, radius 16px. Backdrop `rgba(0,0,0,0.6)` + `blur(8px)`. z-index 60.
+  - Change to: ___
+
+- [ ] **4b. Mobile container:** Full width, 60vh max, bottom sheet. Slide up 200ms ease-out. Drag handle 36×4px `#48484a`. Dismiss: drag down 50% or tap backdrop.
+  - Change to: ___
+
+- [ ] **4c. Header:** "Add a pill" 17px/600, `#f5f5f7`. Close `×` in `#636366`. Bottom border `0.5px solid #38383a`.
+  - Change to: ___
+
+- [ ] **4d. Section headers:** "YOUR PILLS" / "AVAILABLE" / "OTHER ROLES" — 11px/600, `#636366`, uppercase, 0.5px letter-spacing.
+  - Change to: ___
+
+- [ ] **4e. Pill rows:** 44px height, full-width tap. Active: green filled dot `#30d158`, label dimmed `#636366`. Available: gray outline dot `#48484a`, label `#f5f5f7`, description `#8e8e93` 12px. Hover: `#2c2c2e`.
+  - Change to: ___
+
+- [ ] **4f. Drawer vs chat icon:** Small 12px icon on each row — grid icon for 19 drawer pills, chat bubble for 21 chat pills. Color `#48484a`.
+  - Change to: ___
+
+- [ ] **4g. "Other Roles" section:** Collapsed by default (`▸`). Tap toggles. Hidden for admin (already has all pills).
+  - Change to: ___
+
+- [ ] **4h. "Create custom pill" row:** Bottom of list. `+` and label in `#0a84ff`. Separator `0.5px solid #38383a` above. Opens existing Milo conversation flow.
+  - Change to: ___
+
+---
+
+## Design Token Reference
+
+All values below are sourced from shipped components (PillBar, PillDrawer, MorningBriefing, SearchBar, UniversalDropZone). No new tokens are introduced — every assumption above uses an existing value.
+
+| Role | Token | Hex |
 |---|---|---|
-| Background (page) | `#000000` | Operator page, Top5Frame |
-| Background (surface) | `#1c1c1e` | Pills, inputs, cards, modals |
-| Background (hover) | `#2c2c2e` | Input focus, pill hover |
-| Border (default) | `#38383a` | Pills, inputs, cards |
-| Border (hover) | `#48484a` | Pill hover, add-pill dashed |
-| Text (primary) | `#f5f5f7` | Labels, headings |
-| Text (secondary) | `#8e8e93` | Descriptions, subtitles |
-| Text (tertiary) | `#636366` | Placeholders, muted labels |
-| Text (disabled) | `#48484a` | Disabled states |
-| Accent (blue) | `#0a84ff` | Links, focus borders, CTA |
-| Badge (orange) | `#ff9f0a` | Pill count badges, degraded status |
-| Severity (red) | `#ff453a` | Critical dots, errors, delete |
-| Severity (green) | `#30d158` | Healthy dots, success checks |
-| Border radius (pill) | 20px | Pills |
-| Border radius (card) | 12px | Cards, inputs |
-| Border radius (modal) | 16px | Modals, sheets |
-| Font (pill label) | 13px | Pills |
-| Font (input) | 15px | SearchBar |
-| Font (small) | 11-12px | Badges, footers, section headers |
+| Page background | `bg-page` | `#000000` |
+| Surface background | `bg-surface` | `#1c1c1e` |
+| Hover background | `bg-hover` | `#2c2c2e` |
+| Default border | `border` | `#38383a` |
+| Hover border | `border-hover` | `#48484a` |
+| Primary text | `text-primary` | `#f5f5f7` |
+| Secondary text | `text-secondary` | `#8e8e93` |
+| Tertiary text | `text-tertiary` | `#636366` |
+| Disabled text | `text-disabled` | `#48484a` |
+| Accent (blue) | `accent` | `#0a84ff` |
+| Badge (orange) | `badge` | `#ff9f0a` |
+| Severity red | `red` | `#ff453a` |
+| Severity green | `green` | `#30d158` |
+
+| Role | Token | Value |
+|---|---|---|
+| Pill radius | `radius-pill` | 20px |
+| Card/input radius | `radius-card` | 12px |
+| Modal radius | `radius-modal` | 16px |
+| Pill font | `font-pill` | 13px |
+| Input font | `font-input` | 15px |
+| Small font | `font-small` | 11–12px |
