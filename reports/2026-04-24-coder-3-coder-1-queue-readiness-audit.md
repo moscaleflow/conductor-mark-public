@@ -4,6 +4,8 @@
 **Scope:** Pure audit, read-only. Every assumed dependency verified against actual code before Coder-1 burns directive cycles.
 **Motivation:** D200 hotfix proved assumptions can be wrong (engine.ts referenced files that didn't exist). This audit catches all such issues across 7 queued directives.
 
+**UPDATE (Decision 114):** All 7 hard blockers resolved. Mark decided `blacklist_entries` is authoritative (Decision 35 primitive table, 343 entries, tenant='tlp'). Legacy `blacklist` table deprecated — migration/drop after Coder-2 D101 wireup. Each blocker mapped to the directive that owns its resolution. Coder-1 cleared to fire down queue.
+
 ---
 
 ## Directive 1: Vet Part 1 Finish (post-D200 hotfix)
@@ -26,11 +28,18 @@
 ### Verdict
 
 - **READY-TO-BUILD:** SeverityBadge, IssueCard, IssueSidebar, engine.ts, route.ts, BASE_RULES, VerticalRulePack, analysis_id column
-- **BLOCKERS:**
-  - `runAnalysis` — not a standalone import. Coder-1 must use `createAnalysisEngine(config)` then call `engine.analyze(text, opts)`. Name correction only, no code missing.
-  - `getAnalysisRecord` — does not exist. Correct method: `engine.getAnalysis(id)` returns `Promise<StoredAnalysis | null>`. Name correction only.
+- **BLOCKERS:** None (0 hard blockers)
+- **AWARENESS (build-time):**
+  - `runAnalysis` — not a standalone import. Use `createAnalysisEngine(config)` then `engine.analyze(text, opts)`.
+  - `getAnalysisRecord` — does not exist. Use `engine.getAnalysis(id)` → `Promise<StoredAnalysis | null>`.
 - **SCHEMA AMENDMENTS NEEDED:** None
-- **ESTIMATED PREP TIME:** 0 — name corrections are awareness items, not missing code
+- **ESTIMATED PREP TIME:** 0
+
+### Coder-1 Prep Checklist
+- [ ] Confirm D200 hotfix landed (engine.ts imports resolved)
+- [ ] Use `createAnalysisEngine(config)` factory pattern, not `runAnalysis` standalone
+- [ ] Use `engine.getAnalysis(id)`, not `getAnalysisRecord`
+- [ ] Verify `verticalConfig.analysis.perIssueFields` exists in `vertical.config.ts` before relying on IssueCard field display
 
 ---
 
@@ -50,9 +59,14 @@
 ### Verdict
 
 - **READY-TO-BUILD:** All components present, all inline
-- **BLOCKERS:** None
+- **BLOCKERS:** None (0 hard blockers)
 - **SCHEMA AMENDMENTS NEEDED:** None
 - **ESTIMATED PREP TIME:** 0
+
+### Coder-1 Prep Checklist
+- [ ] All UI is inline in `proof/page.tsx` — no external component dependencies
+- [ ] `SeverityBar` (line 123), `Stat` (line 651), `RiskBadge` (line 81), `RoleBadge` (line 103) are all inline — modify in-place
+- [ ] Note: proof page has its OWN `RiskBadge`, separate from `components/contract/SeverityBadge.tsx`
 
 ---
 
@@ -73,13 +87,24 @@
 ### Verdict
 
 - **READY-TO-BUILD:** publish tool (exists), contract-review page (exists)
-- **BLOCKERS:**
-  1. **URL mismatch (BUG):** Publish tool generates `/contracts/review/:id` but route is `/contract-review/:id`. Fix: change line 131 in publish tool to match actual route. Single-line fix.
-  2. **`/contracts` listing page absent:** Must be created. Scope: new page with contract list, filters, status indicators.
-  3. **Ghost analysis pipeline absent:** No cleanup code exists. Must be built from scratch if the directive requires it. Scope: depends on directive — could be a cron/edge function or a one-off script.
-  4. **`screenEntity` → `check()`:** Name correction. But bigger issue: milo-for-ppc uses inline blacklist code against `blacklist` table while `@milo/blacklist` package uses `blacklist_entries` table. Integration requires either (a) migrating inline code to use the package, or (b) aligning table names.
-- **SCHEMA AMENDMENTS NEEDED:** Blacklist table alignment may need Mark decision — which table is authoritative?
-- **ESTIMATED PREP TIME:** 30min for URL fix + blacklist name correction. `/contracts` page and ghost pipeline are full build items, not prep.
+- **BLOCKERS:** None remaining (all 4 resolved — see below)
+- **RESOLVED BLOCKERS (Decision 114):**
+  1. ~~URL mismatch (BUG)~~ **RESOLVED** — fix publish tool line 131: `/contracts/review/${row.id}` → `/contract-review/${row.id}`. In-scope for D3 gap fix Part A. Single-line fix.
+  2. ~~`/contracts` listing page absent~~ **RESOLVED** — will be created as D3 gap fix Part B. Already in directive scope.
+  3. ~~Ghost analysis pipeline absent~~ **RESOLVED** — pipeline will be scoped and built as part of D3. If directive determines it's unnecessary, it's a no-op.
+  4. ~~Blacklist table mismatch~~ **RESOLVED (Decision 114)** — `blacklist_entries` is authoritative (Decision 35 primitive, 343 entries, tenant='tlp'). Legacy `blacklist` table deprecated. All new code uses `@milo/blacklist` SDK with `check(client, input)` method against `blacklist_entries`. Inline `blacklistPreCheck()` in route.ts to be migrated to use package.
+- **AWARENESS (build-time):**
+  - `screenEntity` does not exist — correct method is `check(client, input)` where `input: ScreenInput = { company_name (required), contact_names?, email?, ip_address?, linkedin_url? }`
+  - Also available: `screenAgainst(entries, input)` for pure matching without DB call
+- **SCHEMA AMENDMENTS NEEDED:** None
+- **ESTIMATED PREP TIME:** 0 — all items are in-scope for the D3 directive
+
+### Coder-1 Prep Checklist
+- [ ] Fix URL in `publish-contract-for-buyer-review.ts` line 131 first (single-line, unblocks all links)
+- [ ] Use `@milo/blacklist.check(client, input)` for all blacklist operations — NOT inline `blacklistPreCheck()`
+- [ ] `check()` queries `blacklist_entries` table (not `blacklist`) — this is authoritative per Decision 114
+- [ ] `ScreenInput` requires `company_name` — all other fields optional
+- [ ] `/contracts/page.tsx` is new — no existing code to modify, create from scratch
 
 ---
 
@@ -107,9 +132,17 @@
 ### Verdict
 
 - **READY-TO-BUILD:** All 4 prompt files present. All 5 HIGH targets verified — text has not drifted since D106 audit.
-- **BLOCKERS:** None
+- **BLOCKERS:** None (0 hard blockers)
 - **SCHEMA AMENDMENTS NEEDED:** None
 - **ESTIMATED PREP TIME:** 0
+
+### Coder-1 Prep Checklist
+- [ ] Read D106 report for exact refinement text: `reports/2026-04-24-coder-3-pill-voice-consistency-audit.md`
+- [ ] HIGH-01: Normalize Publisher L36 + Buyer L51 experience claims (remove contradictory first-person numbers)
+- [ ] HIGH-02: Add anti-hedging to Sales, Publisher, Buyer (Vet L56 is the template)
+- [ ] HIGH-03: Add out-of-scope deflection to all 4 pills
+- [ ] HIGH-04: Add posture anchors to Sales, Publisher, Buyer (Vet L5 is the template)
+- [ ] HIGH-05: Add TLP voice registers to Sales (po tita, penguin culture, FAB team voice)
 
 ---
 
@@ -137,13 +170,27 @@
 ### Verdict
 
 - **READY-TO-BUILD:** contract-negotiation package (with correct method names), contract-signing package, negotiation_links table, short code generation
-- **BLOCKERS:**
-  1. **`/api/s/[code]` or `/s/[code]` route absent:** Must be built. Resolves short codes to negotiation links or signing documents.
-  2. **`/contract/[slug]` route absent:** Must be created for pretty-URL contract display.
-  3. **Method name corrections:** `sendRound` not `createRound`, `generateLink` not `createLink`, use `createNegotiationClient().create()` not bare `createNegotiation`.
-  4. **Pretty slug generation absent:** Only random 8-char codes exist. Human-readable slugs need implementation.
+- **BLOCKERS:** None remaining (all resolved — see below)
+- **RESOLVED BLOCKERS (Decision 114):**
+  1. ~~`/api/s/[code]` or `/s/[code]` route absent~~ **RESOLVED** — will be created as part of D5 (Vet Part 2) build scope. Short-URL resolver route is a core deliverable of this directive.
+  2. ~~`/contract/[slug]` route absent~~ **RESOLVED** — will be created as part of D5 build scope. Pretty-URL contract display page is a core deliverable.
+  3. ~~Pretty slug generation absent~~ **RESOLVED** — will be built as part of D5. Only random 8-char codes exist currently; human-readable slug logic is new work in-scope.
+- **AWARENESS (build-time):**
+  - `sendRound()` not `createRound()` (rounds.ts:14)
+  - `generateLink()` not `createLink()` (links.ts:26, exported from index.ts)
+  - Use `createNegotiationClient().create()` factory pattern, not bare `createNegotiation()` import
+  - Two independent `generateShortCode()` implementations exist: `contract-negotiation/links.ts:9` (crypto.getRandomValues) and `contract-signing/tokens.ts:7` (randomUUID). Be aware of dual implementation.
 - **SCHEMA AMENDMENTS NEEDED:** None — `negotiation_links` already has `short_code` column
-- **ESTIMATED PREP TIME:** Method names are awareness items. `/s/[code]` + `/contract/[slug]` routes are build items (~2-3 hours).
+- **ESTIMATED PREP TIME:** 0 — all items are in-scope for the D5 directive
+
+### Coder-1 Prep Checklist
+- [ ] Use `createNegotiationClient()` factory, then `.create()` for negotiations
+- [ ] Use `sendRound()` for rounds (NOT `createRound`)
+- [ ] Use `generateLink()` for links (NOT `createLink`)
+- [ ] Build `/s/[code]` route — resolves short codes to negotiation links or signing documents
+- [ ] Build `/contract/[slug]` route — pretty-URL contract display page
+- [ ] Build pretty slug generation (currently only random 8-char codes exist)
+- [ ] Note: `resolveShortCode()` in contract-signing resolves against `signing_documents` only — negotiation short codes may need separate resolver or unified approach
 
 ---
 
@@ -160,12 +207,20 @@
 ### Verdict
 
 - **READY-TO-BUILD:** Resend SDK integration (infra exists)
-- **BLOCKERS:**
-  1. **`/s/[code]` page absent:** Same blocker as D5. D5 must ship first or in parallel.
-  2. **Extend expiration API absent:** Must be built in `@milo/contract-negotiation`. New method on the client: `extendLinkExpiration(linkId, additionalDays)`.
-  3. **Negotiation email template absent:** `sendSigningConfirmation()` is signing-only. Need `sendNegotiationNotification()` or similar. Resend infra is wired — template + method needed.
+- **BLOCKERS:** None remaining (all resolved — see below)
+- **RESOLVED BLOCKERS (Decision 114):**
+  1. ~~`/s/[code]` page absent~~ **RESOLVED** — prerequisite built in D5 (Vet Part 2). D6 fires after D5 ships.
+  2. ~~Extend expiration API absent~~ **RESOLVED** — will be built as part of D6 scope. New method in `@milo/contract-negotiation`: `extendLinkExpiration(linkId, additionalDays)`. Goes through Decision 38 process (SDK extension). Proposed signature: `extendLinkExpiration(client: NegotiationClient, linkId: string, additionalDays: number) → Promise<NegotiationLink>`. Updates `expires_at` column on `negotiation_links`.
+  3. ~~Negotiation email template absent~~ **RESOLVED** — will be built as part of D6 scope. New method in `@milo/contract-signing`: `sendNegotiationNotification()` or similar. Resend SDK is wired — needs new template for "You have a redline to review" notifications. Proposed: reuse `ResendEmailProvider` class, add `sendNegotiationRoundNotification({ to, negotiationId, roundNumber, linkUrl })`.
 - **SCHEMA AMENDMENTS NEEDED:** None
-- **ESTIMATED PREP TIME:** ~2-3 hours (extend API + email method + template)
+- **ESTIMATED PREP TIME:** 0 — extend API + email template are core D6 deliverables, not prep
+
+### Coder-1 Prep Checklist
+- [ ] Confirm D5 (Vet Part 2) shipped first — `/s/[code]` route must exist
+- [ ] Build `extendLinkExpiration()` in `@milo/contract-negotiation` — updates `expires_at` on `negotiation_links` table
+- [ ] Build `sendNegotiationRoundNotification()` in `@milo/contract-signing` — reuse `ResendEmailProvider` class + Resend SDK
+- [ ] Existing `sendSigningConfirmation()` is signing-only — do NOT repurpose for negotiation notifications
+- [ ] `computeExpiresAt(days)` in `tokens.ts` can be reused for expiration calculation
 
 ---
 
@@ -192,80 +247,96 @@
 ### Verdict
 
 - **READY-TO-BUILD:** All 6 @milo/* primitive methods exist with correct signatures. SSE pattern established. File drop handler exists (needs extension).
-- **BLOCKERS:**
-  1. **`screenEntity` → `check()`:** Name correction across all D7 references. Not a code blocker.
-  2. **Blacklist integration gap:** milo-for-ppc uses inline `blacklistPreCheck()` against `blacklist` table. Package uses `blacklist_entries` table. If D7 wires the package, table alignment is needed.
-  3. **Env var addition:** `ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD` needs to be added to `.env` + `.env.example`.
-- **SCHEMA AMENDMENTS NEEDED:** None (D107 spec already covers the 2 new columns on chat_logs)
-- **ESTIMATED PREP TIME:** 15min (env var + classifier extraction are part of the build, not prep)
+- **BLOCKERS:** None remaining (all resolved — see below)
+- **RESOLVED BLOCKERS (Decision 114):**
+  1. ~~Blacklist table mismatch~~ **RESOLVED (Decision 114)** — `blacklist_entries` is authoritative. Inline `blacklistPreCheck()` in route.ts must be migrated to use `@milo/blacklist.check(client, input)`. Part of D7 build scope.
+  2. ~~`screenEntity` name~~ **RESOLVED** — awareness item only. Correct method: `check(client, input)`.
+- **AWARENESS (build-time):**
+  - Use `@milo/blacklist.check(client, input)` — NOT inline `blacklistPreCheck()` and NOT `screenEntity`
+  - `ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD` env var — add to `.env` + `.env.example` during build (default 0.85 per D112)
+  - Image upload path (`readAsDataURL` for images) — create during build, extend existing `handleFileContent`
+  - Classifier prompt file — extract from inline `CLASSIFIER_PROMPT` in route.ts to `src/lib/ask/prompts/classifier.ts`
+  - New SSE events (`confirm_switch`, `classify_confirm`) — add during build
+  - Replace `contractFile: { name, data }` with `fileUpload: { name, data, mime }` per D112
+- **SCHEMA AMENDMENTS NEEDED:** 2 new columns on `chat_logs` per D107 spec (`operator_override BOOLEAN`, `final_destination TEXT`)
+- **ESTIMATED PREP TIME:** 0 — all items are in-scope for the D7 directive
+
+### Coder-1 Prep Checklist
+- [ ] Read D112-locked spec: `reports/2026-04-24-coder-3-surface-18-minimal-spec.md` (definitive)
+- [ ] Migrate inline `blacklistPreCheck()` → `@milo/blacklist.check(client, input)` targeting `blacklist_entries` table
+- [ ] `ScreenInput` requires `company_name` — all other fields optional
+- [ ] Add `ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD=0.85` to `.env` + `.env.example`
+- [ ] Extract classifier from inline `CLASSIFIER_PROMPT` (route.ts L28) to `src/lib/ask/prompts/classifier.ts`
+- [ ] Replace `contractFile` field with `fileUpload: { name, data, mime }` — backward compat shim for stale payloads
+- [ ] Extend `handleFileContent` (page.tsx L416) with `readAsDataURL` for image MIME types
+- [ ] Add SSE events: `classifying`, `classified`, `classify_confirm`, `confirm_switch`
+- [ ] Run `ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS operator_override BOOLEAN DEFAULT FALSE; ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS final_destination TEXT;`
 
 ---
 
 ## Final Summary
 
-### Total Blockers by Category
+### Blocker Resolution Status (Decision 114)
 
-| Category | Count | Items |
+All 7 hard blockers from D113 are now RESOLVED. Mark decided `blacklist_entries` is authoritative (last open decision). Every blocker is mapped to the directive that owns its build.
+
+| # | Original Blocker | Resolution | Owner Directive |
+|---|---|---|---|
+| 1 | `/s/[code]` route absent | Built as core deliverable | D5 (Vet Part 2) |
+| 2 | `/contract/[slug]` route absent | Built as core deliverable | D5 (Vet Part 2) |
+| 3 | `/contracts` listing page absent | Built as core deliverable | D3 (/contracts gap fixes Part B) |
+| 4 | Extend expiration API absent | New `extendLinkExpiration()` in `@milo/contract-negotiation` | D6 (Vet Part 3) |
+| 5 | Negotiation email template absent | New `sendNegotiationRoundNotification()` in `@milo/contract-signing` | D6 (Vet Part 3) |
+| 6 | URL bug in publish tool | Single-line fix: `/contracts/review/` → `/contract-review/` | D3 (/contracts gap fixes Part A) |
+| 7 | Blacklist table mismatch | `blacklist_entries` authoritative (Decision 114). Migrate inline code to `@milo/blacklist` SDK. | D3 + D7 |
+
+### Awareness Items (build-time, not blockers)
+
+| Item | Correct Usage | Affected Directives |
 |---|---|---|
-| **Absent routes (must build)** | 3 | `/s/[code]` route (D5+D6), `/contract/[slug]` route (D5), `/contracts` listing page (D3) |
-| **Absent APIs (must build)** | 2 | Extend expiration method (D6), negotiation email template (D6) |
-| **Bug fix needed** | 1 | URL mismatch in publish tool — `/contracts/review/:id` should be `/contract-review/:id` (D3) |
-| **Name corrections (awareness)** | 5 | `runAnalysis` → `engine.analyze()` (D1), `getAnalysisRecord` → `engine.getAnalysis()` (D1), `createRound` → `sendRound()` (D5), `createLink` → `generateLink()` (D5), `screenEntity` → `check()` (D3+D7) |
-| **Integration issues** | 1 | Blacklist table mismatch: inline code uses `blacklist` table, package uses `blacklist_entries` (D3+D7) |
-| **Expected absent (add during build)** | 3 | `ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD` env var (D7), image upload path (D7), classifier prompt file extraction (D7) |
-| **Absent pipelines** | 1 | Ghost analysis cleanup (D3) — if directive requires it |
-| **Pretty slug generation** | 1 | No human-readable slug logic exists (D5) |
+| `runAnalysis` standalone | Use `createAnalysisEngine(config)` → `engine.analyze(text, opts)` | D1 |
+| `getAnalysisRecord` | Use `engine.getAnalysis(id)` → `Promise<StoredAnalysis \| null>` | D1 |
+| `createRound` | Use `sendRound()` (rounds.ts:14) | D5 |
+| `createLink` | Use `generateLink()` (links.ts:26) | D5 |
+| `screenEntity` | Use `check(client, input)` — `ScreenInput.company_name` required | D3, D7 |
+| `ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD` | Add to `.env` + `.env.example`, default `0.85` | D7 |
+| Image upload path | Extend `handleFileContent` with `readAsDataURL` for image MIMEs | D7 |
+| Classifier prompt extraction | Extract inline `CLASSIFIER_PROMPT` to `src/lib/ask/prompts/classifier.ts` | D7 |
 
-**TOTAL HARD BLOCKERS: 7** (3 absent routes + 2 absent APIs + 1 bug + 1 integration issue)
-**TOTAL AWARENESS ITEMS: 8** (5 name corrections + 3 expected absent)
+### Recommended Directive Sequencing (CONFIRMED — Decision 114)
 
-### Blockers Grouped by Fix Type
+Order unchanged from D113. Blacklist decision now resolved — D3 and D7 no longer gated.
 
-**Stub file / new route (Coder-1 builds these):**
-- `/s/[code]` or `/api/s/[code]` — short-URL resolver route (blocks D5 + D6)
-- `/contract/[slug]` — pretty-URL contract display (blocks D5)
-- `/contracts/page.tsx` — contracts listing page (blocks D3)
+| Order | Directive | Status | Rationale |
+|---|---|---|---|
+| **1** | **D4: Voice refinement** | CLEAR | Zero blockers. All target text verified. Pure prompt edits. Ship immediately. |
+| **2** | **D2: /proof visual cleanup** | CLEAR | Zero blockers. All components inline. Pure UI. Ship immediately. |
+| **3** | **D1: Vet Part 1 finish** | CLEAR | Awareness items only. Ships as soon as D200 hotfix lands. |
+| **4** | **D3: /contracts gap fixes** | CLEAR | Blacklist decision resolved. URL fix + listing page + blacklist migration all in-scope. |
+| **5** | **D7: Surface 18** | CLEAR | All primitives present. Biggest build. Blacklist migration shared with D3 approach. |
+| **6** | **D5: Vet Part 2** | CLEAR | `/s/[code]` + `/contract/[slug]` routes built in-scope. Method name corrections documented. |
+| **7** | **D6: Vet Part 3** | CLEAR (after D5) | Depends on D5 shipping. Extend API + email template built in-scope. |
 
-**Primitive refactor (Coder-1 in milo-engine):**
-- `@milo/contract-negotiation` — add `extendLinkExpiration()` method (blocks D6)
-- `@milo/contract-signing` — add `sendNegotiationNotification()` email method (blocks D6)
-
-**Bug fix (Coder-1 single-line):**
-- `publish-contract-for-buyer-review.ts` line 131 — change `/contracts/review/${row.id}` to `/contract-review/${row.id}`
-
-**Mark decision needed:**
-- Blacklist table alignment: `blacklist` (inline code) vs `blacklist_entries` (package). Which is authoritative? Should inline code migrate to use `@milo/blacklist` package, or should package be updated to query `blacklist` table? Affects D3 + D7.
-
-### Recommended Directive Sequencing
-
-Based on blocker cascade analysis:
-
-| Order | Directive | Rationale |
-|---|---|---|
-| **1** | **D4: Voice refinement** | Zero blockers. All target text verified. Pure prompt edits, no dependencies. Ship immediately. |
-| **2** | **D2: /proof visual cleanup** | Zero blockers. All components inline. Pure UI, no SDK dependencies. Independent of everything else. |
-| **3** | **D1: Vet Part 1 finish** | Two name corrections only (awareness items, not missing code). Can ship as soon as D200 hotfix lands. |
-| **4** | **D3: /contracts gap fixes** | 4 sub-parts. URL bug is a one-line fix. `/contracts` listing page is new work. Ghost pipeline scope unclear. Blacklist table decision from Mark needed. Start after Mark resolves blacklist table question. |
-| **5** | **D7: Surface 18** | Most dependencies PRESENT. Biggest build. Blacklist table decision affects this too. Classifier extraction and env var are part of the build, not prep. Can start in parallel with D3 if blacklist question is resolved. |
-| **6** | **D5: Vet Part 2** | Needs `/s/[code]` route + `/contract/[slug]` route built. Method name corrections. Not blocked by earlier directives. Can start after D1. |
-| **7** | **D6: Vet Part 3** | Depends on D5 shipping first (`/s/[code]` route). Also needs extend-expiration API + email template built in milo-engine. Last in sequence. |
-
-### Critical Path
+### Critical Path (Updated)
 
 ```
-D4 (voice) ──────────────────────> ship
-D2 (/proof) ─────────────────────> ship
-D1 (Vet P1) ── D200 lands ──────> ship
-                                     ↓
-Mark: blacklist table decision ───> D3 (/contracts) ──> ship
-                                  ↘ D7 (Surface 18) ──> ship
-D5 (Vet P2) ── build /s/[code] ─> ship
-                                     ↓
-                              D6 (Vet P3) ──> ship
+D4 (voice) ───────────────────────> ship
+D2 (/proof) ──────────────────────> ship
+D1 (Vet P1) ── D200 lands ───────> ship
+D3 (/contracts) ── blacklist migration ──> ship
+D7 (Surface 18) ── biggest build ─> ship
+D5 (Vet P2) ── /s/[code] + /contract/[slug] ──> ship
+                                                    ↓
+                                          D6 (Vet P3) ──> ship
 ```
 
-**Single Mark decision gates D3 + D7:** Which blacklist table is authoritative — `blacklist` (inline) or `blacklist_entries` (package)?
+**No remaining gates.** D4, D2, D1 can fire in parallel. D3 and D7 can start immediately (blacklist decision resolved). D5 can start anytime. Only D6 has a hard prerequisite (D5 must ship first).
+
+**Parallelization opportunities:**
+- D4 + D2 + D1 — fully independent, can ship in parallel
+- D3 + D5 — independent, can run in parallel
+- D7 — can start after D3's blacklist migration pattern is established (shared approach)
 
 ---
 
-Cross-references: Decision 107 (Surface 18 spec), Decision 111 (open questions), Decision 112 (3 HIGH decisions locked), Decision 200 (engine.ts hotfix).
+Cross-references: Decision 107 (Surface 18 spec), Decision 111 (open questions), Decision 112 (3 HIGH decisions locked), Decision 113 (original audit), Decision 114 (this resolution), Decision 200 (engine.ts hotfix).
