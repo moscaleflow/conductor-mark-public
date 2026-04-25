@@ -83,7 +83,7 @@ The current auto-classifier (`pill === 'auto'`) uses a text-based `classifyInput
 |---|---|
 | **Detection rule** | MIME `image/png` or `image/jpeg`. Size limit: 10MB (images are larger than documents). Client-side: detect image MIME, read as base64 via `readAsDataURL`. |
 | **Classification step** | `callClaudeVision` with classifier system prompt (see §3). Vision model extracts: `{type: 'linkedin_profile', name, title, company, location, profile_url, confidence}`. Detection signals: LinkedIn UI patterns (blue nav bar, profile photo placement, "Experience" / "About" sections, linkedin.com URL visible in browser chrome). |
-| **Destination** | **Pill selection:** If title contains buyer/advertiser/demand keywords → Buyer pill. If title contains publisher/affiliate/media-buying/supply keywords → Publisher pill. If ambiguous → Sales pill (default for LinkedIn). Vision extraction provides the data; pill prompt provides the voice. |
+| **Destination** | **Pill selection (LOCKED — Decision 112, Q-HIGH-2):** Milo infers from extracted job title + company context. Title keyword mapping: buyer/advertiser/demand/brand/agency → Buyer pill. publisher/affiliate/media-buying/supply/traffic-broker/network → Publisher pill. Ambiguous or no clear signal → Sales pill (default). Inference shown to operator: "Looks like a Sales lead based on title" with one-click override to Publisher or Buyer. Override visible on ALL LinkedIn routes regardless of confidence. Inference logic lives in the classifier prompt, not new code. |
 | **Drafted action** | 1. `@milo/crm.createLead({ company, contact_name: name, linkedin_url: profile_url, role: title, source: 'research', metadata: { surface18_source: 'linkedin-drop' } })` — creates CRM lead with extracted data. 2. `@milo/blacklist.check(client, { company_name: company, contact_names: [name], linkedin_url: profile_url })` — screens entity. 3. If blacklist hit: surface in chat with warning. If clean: draft outreach message in the destination pill's voice. Chat response: "I pulled [Name], [Title] at [Company] from that screenshot. Clean on the blacklist. Here's an outreach draft:" |
 | **Fallback** | If vision can't extract name + company (confidence < 0.5): "I see a screenshot but can't make out the details. Who is this and what's their role?" If vision identifies a non-LinkedIn screenshot: fall through to Route C (scam chat) or Route F (general). |
 | **Effort** | **M** — new image upload path on client, new vision classifier prompt, new CRM/blacklist wiring. No new primitives. |
@@ -141,7 +141,7 @@ The current auto-classifier (`pill === 'auto'`) uses a text-based `classifyInput
 Backend: `/api/ask/route.ts`. The classifier runs AFTER rate limiting and BEFORE pill prompt execution. It replaces the current hard-coded `pill === 'vet' && contractFile?.data` gate with a general-purpose classification step.
 
 ```
-Request arrives at /api/ask
+Request arrives at /api/ask with fileUpload: { name, data, mime }
   ↓
 Rate limit check (existing)
   ↓
@@ -156,9 +156,22 @@ File attached?
         ├── Spreadsheet → Route E fallback (v2 defer)
         └── Other → Route F fallback
         ↓
-      Classification result: { destination, subtype, confidence, extracted_entities }
-        ├── confidence ≥ 0.85 → proceed directly, emit SSE classified event
-        └── confidence < 0.85 → emit SSE clarifier event, ask operator to confirm
+      Classification result: { destination, subtype, confidence, extracted_entities,
+                               inferred_pill_switch, suggested_prompt }
+        ↓
+      Cross-pill check (LOCKED — Decision 112, Q-HIGH-1):
+        ├── destination matches current pill → proceed, no confirmation needed
+        └── destination differs from current pill → emit SSE confirm_switch event
+              "I see a LinkedIn screenshot. Switch to Sales?" [Yes / Stay on Vet]
+              Operator confirms or stays → proceed with chosen pill
+        ↓
+      Auto-submit threshold (LOCKED — Decision 112, Q-HIGH-3):
+        ├── confidence ≥ ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD (default 0.85)
+        │     → auto-submit: classify → analysis runs → response renders. Zero typing.
+        └── confidence < threshold
+              → pre-fill input with suggested_prompt, operator confirms send
+              "I see a screenshot but I'm not sure what it is.
+               Want me to [vet the entity / draft outreach / something else]?"
         ↓
       Operator override? (if provided in follow-up message)
         ├── YES → re-route to operator-specified pill
@@ -244,6 +257,15 @@ interface ClassifierResult {
     size: number;
     name: string;
   };
+  // LOCKED — Decision 112, Q-HIGH-1: cross-pill confirmation
+  inferred_pill_switch: {
+    from: string;       // pill operator was on when file was dropped
+    to: string;         // pill classifier wants to route to
+    differs: boolean;   // true when from !== to → triggers confirmation
+  };
+  // LOCKED — Decision 112, Q-HIGH-3: low-confidence pre-fill
+  suggested_prompt: string | null;  // pre-filled input text when confidence < threshold
+                                    // null when confidence >= threshold (auto-submit)
 }
 ```
 
@@ -266,10 +288,12 @@ The operator sees a "Classifying..." banner during this window. The existing cin
 
 ## 4. Operator Experience Flow
 
-### 4a. Drop → Classify → Route → Deliver
+### 4a. Drop → Classify → Confirm → Route → Deliver
+
+*Updated with 3 LOCKED decisions from Decision 112.*
 
 ```
-1. OPERATOR drops file on /ask chat surface
+1. OPERATOR drops file on /ask chat surface (may be on any pill)
      ↓
 2. Client: MIME detection + size check
    - Image (PNG/JPG/WEBP): readAsDataURL → base64, max 10MB
@@ -278,43 +302,77 @@ The operator sees a "Classifying..." banner during this window. The existing cin
    - Spreadsheet: reject with "tell me what to do" message
    - Other: reject with "tell me what this is" message
      ↓
-3. Client: sends to /api/ask with new `fileUpload` field:
-   { pill: 'auto', message: '[optional operator context]',
+3. Client: sends to /api/ask with `fileUpload` field
+   (LOCKED — Decision 112, Q-HIGH-1: replaces legacy `contractFile` field):
+   { pill: currentPill, message: '[optional operator context]',
      fileUpload: { name, data: base64, mime } }
+   Backward compat: if `contractFile` sent by stale client cache,
+   treat as `fileUpload` with `mime: 'application/pdf'`.
      ↓
 4. Backend: classifier runs
    - SSE event: { type: 'classifying', text: 'Classifying this...' }
      ↓
-5. Backend: classifier result
-   - HIGH confidence (≥ 0.85):
-     SSE event: { type: 'classified', destination, entities, confidence }
-     Chat banner: "I see a [contract from Granite Media / LinkedIn profile for Randy at Granite Media / scam chat mentioning Sky Marketing]. Running [analysis / outreach draft / blacklist check]..."
-     [Override link visible: "Wrong? Route to ___"]
-   - LOW confidence (< 0.85):
-     SSE event: { type: 'classify_confirm', destination, entities, confidence }
-     Chat prompt: "I think this is a [contract from Granite Media] for Vet review. Right destination? [Yes] [No, route to ___]"
-     Wait for operator confirmation before proceeding.
+5. Cross-pill confirmation (LOCKED — Decision 112, Q-HIGH-1):
+   - Classifier returns destination. Compare to `pill` in request (current pill).
+   - SAME pill (destination matches current):
+     → proceed without confirmation
+   - DIFFERENT pill (destination differs from current):
+     → SSE event: { type: 'confirm_switch', from: currentPill, to: destination }
+     → Chat prompt: "I see a LinkedIn screenshot. Switch to Sales?"
+       [Yes, switch to Sales] [Stay on Vet]
+     → Wait for operator choice before proceeding.
+     → ~1s friction on cross-pill routes. Prevents misroutes.
      ↓
-6. Backend: fires destination pipeline
+6. Auto-submit vs confirm (LOCKED — Decision 112, Q-HIGH-3):
+   Threshold: ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD env var (default 0.85)
+   - HIGH confidence (≥ threshold):
+     AUTO-SUBMIT. Drop → classify → analysis runs → response renders.
+     Zero typing required. Same UX as current Vet contract drops.
+     SSE event: { type: 'classified', destination, entities, confidence }
+     Chat banner: "I see a [contract from Granite Media / LinkedIn profile
+       for Randy at Granite Media]. Running [analysis / outreach draft]..."
+     [Override link visible: "Wrong? Route to ___"]
+   - LOW confidence (< threshold):
+     PRE-FILL + CONFIRM. Input field pre-filled with suggested prompt.
+     SSE event: { type: 'classify_confirm', destination, entities,
+       confidence, suggested_prompt }
+     Chat prompt: "I see a screenshot but I'm not sure what it is.
+       Want me to [vet the entity / draft outreach / something else]?"
+     Operator picks action or types own intent + hits send.
+     ↓
+7. LinkedIn pill inference (LOCKED — Decision 112, Q-HIGH-2):
+   For Route B only. Classifier extracts job title from LinkedIn screenshot.
+   - buyer/advertiser/demand/brand/agency → Buyer pill
+   - publisher/affiliate/media-buying/supply/traffic-broker → Publisher pill
+   - ambiguous / no clear signal → Sales pill (default)
+   Inference shown: "Looks like a Sales lead based on title"
+   One-click override to Publisher or Buyer always visible.
+     ↓
+8. Backend: fires destination pipeline
    - Route A: contract analysis engine → Vet pill prompt with analysis context
-   - Route B: CRM lead creation + blacklist check → destination pill prompt with entity context
+   - Route B: CRM lead creation + blacklist check → destination pill prompt
+     with entity context + title-inferred pill voice
    - Route C: per-entity blacklist check → Vet pill prompt with evidence context
      ↓
-7. Client: renders response in destination pill's voice and format
+9. Client: renders response in destination pill's voice and format
    - Contract: expandable issue list with SeverityBadge (existing components)
    - LinkedIn: outreach draft with CRM lead creation confirmation
    - Scam chat: per-entity disposition with action affordances
 ```
 
-### 4b. Override mechanism
+### 4b. Override and confirmation mechanisms
 
-The operator override lives INLINE in the chat flow:
+Three interaction points exist, in order of appearance (LOCKED — Decision 112):
 
-- **High confidence path:** After the classified banner, a small text link appears: "Wrong? Route to [Vet | Sales | Publisher | Buyer]" with clickable pill options. Clicking one re-routes without re-uploading the file. Backend re-runs the destination pipeline with the new pill.
+1. **Cross-pill confirmation (Q-HIGH-1):** When classifier destination differs from the pill the operator was on. Inline prompt: "I see a LinkedIn screenshot. Switch to Sales?" with [Yes, switch] / [Stay on {currentPill}] buttons. This fires BEFORE auto-submit logic. If operator stays, the file is processed in the current pill with file context injected.
 
-- **Low confidence path:** The confirmation prompt is a structured message with buttons: "[Yes, proceed]" and "[No, route to: Vet | Sales | Publisher | Buyer]". This is NOT a dropdown — it's inline buttons matching the existing pill selector pattern.
+2. **Low-confidence confirmation (Q-HIGH-3):** When confidence < `ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD` (default 0.85). Input field pre-filled with suggested prompt (e.g., "Vet this entity" / "Draft outreach"). Operator edits or confirms. This is NOT a modal — it's the regular input field with pre-filled text. Operator hits send or types over it.
 
-- **Override logging:** If the operator overrides, `operator_override: true` and `final_destination` are set on the chat_logs row. The original `classifier_decision` is preserved in `context_metadata` for training data.
+3. **Post-response override (unchanged):** After the classified banner on high-confidence responses, a small text link: "Wrong? Route to [Vet | Sales | Publisher | Buyer]" with clickable pill options. Clicking one re-routes without re-uploading. Backend re-runs destination pipeline with the new pill.
+
+- **LinkedIn pill inference display (Q-HIGH-2):** On all LinkedIn routes, regardless of confidence level, the inference rationale is visible: "Looks like a Sales lead based on title." Override to Publisher or Buyer is always one click. This is not gated by confidence.
+
+- **Override logging:** If the operator overrides at ANY of these three points, `operator_override: true` and `final_destination` are set on the chat_logs row. The original `classifier_decision` (including `inferred_pill_switch`) is preserved in `context_metadata` for training data.
 
 ### 4c. Mobile experience
 
@@ -413,8 +471,8 @@ The existing thumbs UI (D192) extends for Surface 18 responses:
 | Component | Extension needed | Effort |
 |---|---|---|
 | File drop handler (`handleFileContent`) | Add image MIME detection, base64 encoding via `readAsDataURL`, 10MB size limit for images | S |
-| Request body shape | Add `fileUpload: { name, data, mime }` alongside existing `contractFile` | S |
-| SSE event types | Add `classifying`, `classified`, `classify_confirm` events | S |
+| Request body shape | Replace `contractFile` with `fileUpload: { name, data, mime }` (LOCKED — Decision 112, Q-HIGH-1). Backward compat shim for stale `contractFile` payloads. | S |
+| SSE event types | Add `classifying`, `classified`, `classify_confirm`, `confirm_switch` events (LOCKED — Decision 112, Q-HIGH-1 + Q-HIGH-3) | S |
 | `context_metadata` JSONB shape | Add `classifier` key with decision data | S |
 | `attachments` JSONB shape | Add `surface18` flag and file metadata | S |
 
@@ -454,7 +512,20 @@ The existing thumbs UI (D192) extends for Surface 18 responses:
 
 ## 9. Open Questions for Mark
 
-### From directive (5 questions)
+*3 HIGH questions resolved in Decision 112. 6 MEDIUM + 2 LOW remain OPEN for in-build resolution.*
+
+### LOCKED — resolved by Mark (Decision 112)
+
+~~4. **For LinkedIn screenshot routing to Sales vs Publisher — Milo decides automatically (based on title/company) OR always asks?**~~
+**LOCKED (Q-HIGH-2, Decision 112):** Option B — Milo infers from extracted job title + company context. "Director of Marketing at insurance company" → Buyer. "ACA call publisher" / "PPC traffic broker" → Publisher. Ambiguous → Sales (default). Inference shown with one-click override always visible. Logic lives in classifier prompt, not new code. Post-v1: once accuracy >95%, can reduce override visibility.
+
+~~6. **Should Route B (LinkedIn) auto-submit like Route A (contracts)?**~~
+**LOCKED (Q-HIGH-3, Decision 112):** Hybrid — confidence-based. HIGH confidence (≥ 0.85): auto-submit, zero typing. LOW confidence (< 0.85): pre-fill input with suggested prompt, operator confirms. Threshold tunable via `ASK_CLASSIFIER_AUTO_SUBMIT_THRESHOLD` env var. Applies to ALL routes, not just LinkedIn.
+
+~~8. **Should the `fileUpload` field replace `contractFile` or coexist?**~~
+**LOCKED (Q-HIGH-1, Decision 112):** Option B — `fileUpload` replaces `contractFile`. Classifier runs first; if destination differs from current pill, surface inline confirmation before sending ("I see a LinkedIn screenshot. Switch to Sales?" [Yes / Stay on Vet]). If same pill, proceed without confirmation. Backward compat: stale `contractFile` payloads treated as `fileUpload` with `mime: 'application/pdf'`. Post-v1: once accuracy >95% via harness eval, can shift to silent auto-switch.
+
+### OPEN — 6 MEDIUM (resolve during build)
 
 1. **Should the classifier banner show its confidence score visibly or hide it?**
    Recommendation: HIDE for operators, LOG for admin. Operators don't need to see "0.87 confidence" — they need to see "I see a contract from Granite Media." The /review page can show confidence in the batch results view.
@@ -465,31 +536,22 @@ The existing thumbs UI (D192) extends for Surface 18 responses:
 3. **Should Surface 18 work in /operator surfaces too, or /ask only for v1?**
    Recommendation: /ask only for v1. /operator has its own file handling (contract-review page, entity detail panel). Unifying later is possible but adds scope now.
 
-4. **For LinkedIn screenshot routing to Sales vs Publisher — Milo decides automatically (based on title/company) OR always asks?**
-   Recommendation: AUTO-DECIDE for high confidence. The vision classifier extracts title — if it contains buyer/demand/advertiser keywords, route to Buyer. If it contains publisher/affiliate/media-buying/supply keywords, route to Publisher. Default to Sales for ambiguous titles. Always show the override link so operator can correct.
-
 5. **Scam-chat screenshot routing — auto-blacklist if confidence > 0.95, or always require operator confirm?**
    Recommendation: ALWAYS CONFIRM for blacklist actions. Blacklisting is a high-consequence action (entity is blocked from doing business). Even at 0.99 confidence, a screenshot OCR could misread a name. "Add to blacklist?" with one-click confirm is fast enough.
-
-### Additional open questions (surfaced during spec)
-
-6. **Should Route B (LinkedIn) auto-submit like Route A (contracts)?**
-   Current behavior: contract drops on Vet auto-submit with "Vet this." (`ask/page.tsx:453-457`). Should LinkedIn drops auto-submit with "Evaluate this" or wait for operator to type a message? Recommendation: auto-submit with "I dropped a LinkedIn profile" — same UX as contracts.
 
 7. **File size limit for images: 10MB or lower?**
    Phone screenshots are typically 1-5MB. 10MB allows high-res captures but increases base64 encoding time and API costs. Recommendation: 5MB to match contract limit, revisit if operators report size issues.
 
-8. **Should the `fileUpload` field replace `contractFile` or coexist?**
-   Current `contractFile: { name, data }` is specific to contracts. New `fileUpload: { name, data, mime }` is general-purpose. Recommendation: REPLACE. `fileUpload` is a superset. Route A detects contracts by MIME, not by field name. Backward compatibility: if `contractFile` is still sent (old client cache), treat as `fileUpload` with `mime: 'application/pdf'`.
+11. **Should the image classifier run at `standard` (Sonnet) or `quick` (Haiku)?**
+    Sonnet vision is more reliable for OCR and UI pattern recognition. Haiku vision is faster and cheaper but may miss entity names in low-res screenshots. Recommendation: START with Sonnet, benchmark accuracy, downgrade to Haiku if accuracy holds above 85%.
+
+### OPEN — 2 LOW (post-v1 polish)
 
 9. **CRM lead source value for LinkedIn drops?**
    `LeadSource` enum is `'manual' | 'scrape' | 'referral' | 'inbound' | 'research'`. No `'linkedin-drop'` value. Options: (a) use `'research'` with metadata tag, (b) add `'linkedin-drop'` to enum. Recommendation: (a) use `'research'` with `metadata: { surface18_source: 'linkedin-drop' }`. Zero schema changes. Coder-1 can add the enum value later if filtering by source becomes important.
 
 10. **Multi-file drops?**
     What if operator drops 3 files at once? Current handler takes only `e.dataTransfer?.files[0]`. Recommendation: v1 stays single-file only. Multi-file would need sequential classification + merged response. Defer to v2.
-
-11. **Should the image classifier run at `standard` (Sonnet) or `quick` (Haiku)?**
-    Sonnet vision is more reliable for OCR and UI pattern recognition. Haiku vision is faster and cheaper but may miss entity names in low-res screenshots. Recommendation: START with Sonnet, benchmark accuracy, downgrade to Haiku if accuracy holds above 85%.
 
 ---
 
